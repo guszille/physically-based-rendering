@@ -1,5 +1,7 @@
 // PBR.
 
+#define STB_IMAGE_IMPLEMENTATION
+
 #include <vector>
 #include <iostream>
 
@@ -9,6 +11,7 @@
 #include "sources/graphics/vao.h"
 #include "sources/graphics/vbo.h"
 #include "sources/graphics/ibo.h"
+#include "sources/graphics/texture.h"
 #include "sources/graphics/shader.h"
 
 #include "sources/utils/camera.h"
@@ -30,6 +33,12 @@ Camera camera(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::ve
 glm::mat4 projectionMatrix = glm::perspective(glm::radians(FIELD_OF_VIEW), WINDOW_ASPECT_RATIO, 0.1f, 100.0f);
 
 ShaderProgram* shader;
+
+Texture* albedoTex;
+Texture* normalTex;
+Texture* metallicTex;
+Texture* roughnessTex;
+Texture* aoTex;
 
 VAO* sphereVAO;
 VBO* sphereVBO;
@@ -132,9 +141,25 @@ void setupApplication()
 
 	shader->bind();
 
-	shader->setUniform1f("uAO", 1.0f);
+	shader->setUniform1i("uAlbedoMap", 0);
+	shader->setUniform1i("uNormalMap", 1);
+	shader->setUniform1i("uMetallicMap", 2);
+	shader->setUniform1i("uRoughnessMap", 3);
+	shader->setUniform1i("uAOMap", 4);
 
 	shader->unbind();
+
+	albedoTex = new Texture("resources/textures/rusted_iron/albedo.png");
+	normalTex = new Texture("resources/textures/rusted_iron/normal.png");
+	metallicTex = new Texture("resources/textures/rusted_iron/metallic.png");
+	roughnessTex = new Texture("resources/textures/rusted_iron/roughness.png");
+	aoTex = new Texture("resources/textures/rusted_iron/ao.png");
+
+	albedoTex->bind(0);
+	normalTex->bind(1);
+	metallicTex->bind(2);
+	roughnessTex->bind(3);
+	aoTex->bind(4);
 
 	sphereVAO = new VAO();
 	sphereVBO = new VBO(&vertices[0], vertices.size() * sizeof(float));
@@ -164,7 +189,8 @@ void renderSphere()
 
 void render()
 {
-	int tableDims[2] = { 7, 7 };
+	int nRows = 7;
+	int nColumns = 7;
 	float spacing = 2.5f;
 
 	glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -182,32 +208,23 @@ void render()
 		shader->setUniform3f(("uLightColors[" + std::to_string(n) + "]").c_str(), lightColors[n]);
 	}
 
-	shader->setUniform3f("uAlbedo", 0.5f, 0.0f, 0.0f);
-
 	// Rendering materials.
-	for (int row = 0; row < tableDims[0]; ++row)
+	for (int row = 0; row < nRows; ++row)
 	{
-		shader->setUniform1f("uMetallic", (float)row / (float)tableDims[0]);
-
-		for (int column = 0; column < tableDims[1]; ++column)
+		for (int column = 0; column < nColumns; ++column)
 		{
 			glm::mat4 modelMatrix = glm::mat4(1.0f);
-			modelMatrix = glm::translate(modelMatrix, glm::vec3((column - (tableDims[1] / 2)) * spacing, (row - (tableDims[0] / 2)) * spacing, 0.0f));
+			modelMatrix = glm::translate(modelMatrix, glm::vec3((column - (nColumns / 2)) * spacing, (row - (nRows / 2)) * spacing, 0.0f));
 			
 			shader->setUniformMatrix4fv("uModel", modelMatrix);
 			shader->setUniformMatrix3fv("uNormalMatrix", glm::transpose(glm::inverse(glm::mat3(modelMatrix))));
-			
-			// We clamp the roughness to 0.05 - 1.0 as perfectly smooth surfaces (roughness of 0.0) tend to look a bit off on direct lighting.
-			//
-			shader->setUniform1f("uRoughness", glm::clamp((float)column / (float)tableDims[1], 0.05f, 1.0f));
 			
 			renderSphere();
 		}
 	}
 
-	shader->setUniform3f("uAlbedo", 1.0f, 1.0f, 1.0f);
-
 	// Rendering light sources.
+	/*
 	for (int n = 0; n < 4; ++n)
 	{
 		glm::mat4 modelMatrix = glm::mat4(1.0f);
@@ -220,6 +237,7 @@ void render()
 
 		renderSphere();
 	}
+	*/
 
 	shader->unbind();
 }

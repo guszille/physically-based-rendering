@@ -36,6 +36,9 @@
     <ClCompile Include="sources\utils\camera.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="sources\graphics\texture.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="sources\graphics\vao.h">
@@ -51,6 +54,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="sources\utils\camera.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sources\graphics\texture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

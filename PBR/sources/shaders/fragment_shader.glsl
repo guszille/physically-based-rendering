@@ -7,10 +7,11 @@ in vec2 ioTexCoords;
 out vec4 oFragColor;
 
 // Material parameters.
-uniform  vec3 uAlbedo;
-uniform float uMetallic;
-uniform float uRoughness;
-uniform float uAO;
+uniform sampler2D uAlbedoMap;
+uniform sampler2D uNormalMap;
+uniform sampler2D uMetallicMap;
+uniform sampler2D uRoughnessMap;
+uniform sampler2D uAOMap;
 
 // Lights parameters.
 uniform vec3 uLightPositions[4];
@@ -19,6 +20,23 @@ uniform vec3 uLightColors[4];
 uniform vec3 uCameraPos;
 
 const float PI = 3.14159265359;
+
+vec3 getNormalFromMap()
+{
+    vec3 tangentNormal = texture(uNormalMap, ioTexCoords).xyz * 2.0 - 1.0;
+
+    vec3 Q1 = dFdx(ioWorldPos);
+    vec3 Q2 = dFdy(ioWorldPos);
+    vec2 ST1 = dFdx(ioTexCoords);
+    vec2 ST2 = dFdy(ioTexCoords);
+
+    vec3 N = normalize(ioNormal);
+    vec3 T = normalize(Q1 * ST2.t - Q2 * ST1.t);
+    vec3 B = normalize(cross(N, T));
+    mat3 TBN = mat3(T, -B, N);
+
+    return normalize(TBN * tangentNormal);
+}
 
 float distributionGGX(vec3 N, vec3 H, float roughness)
 {
@@ -64,7 +82,12 @@ vec3 fresnelSchlick(vec3 F0, float cosTheta)
 
 void main()
 {
-    vec3 N = normalize(ioNormal);
+    vec3  albedo = pow(texture(uAlbedoMap, ioTexCoords).rgb, vec3(2.2));
+    vec3  normal = getNormalFromMap();
+    float metallic = texture(uMetallicMap, ioTexCoords).r;
+    float roughness = texture(uRoughnessMap, ioTexCoords).r;
+    float ao = texture(uAOMap, ioTexCoords).r;
+
     vec3 V = normalize(uCameraPos - ioWorldPos);
 
     // Calculate reflectance at normal incidence:
@@ -72,7 +95,7 @@ void main()
     //  - if dia-electric (like plastic) use F0 of 0.04;
     //  - if it's a metal, use the albedo color as F0 (metallic workflow).
     //
-    vec3 F0 = mix(vec3(0.04), uAlbedo, uMetallic);
+    vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
     // Reflectance equation.
     vec3 Lo = vec3(0.0);
@@ -88,12 +111,12 @@ void main()
         vec3  radiance = uLightColors[i] * attenuation;
 
         // Cook-Torrance BRDF.
-        float NDF = distributionGGX(N, H, uRoughness);
-        float G = geometrySmith(N, V, L, uRoughness);
+        float NDF = distributionGGX(normal, H, roughness);
+        float G = geometrySmith(normal, V, L, roughness);
         vec3  F = fresnelSchlick(F0, clamp(dot(H, V), 0.0, 1.0));
            
         vec3  numerator = NDF * G * F;
-        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001; // + 0.0001 to prevent division by zero.
+        float denominator = 4.0 * max(dot(normal, V), 0.0) * max(dot(normal, L), 0.0) + 0.0001; // + 0.0001 to prevent division by zero.
         vec3  specular = numerator / denominator;
 
         vec3  kS = F; // kS is equal to Fresnel.
@@ -106,16 +129,16 @@ void main()
         // Multiply kD by the inverse metalness such that only non-metals have diffuse lighting, or
         // a linear blend if partly metal (pure metals have no diffuse light).
         //
-        kD *= 1.0 - uMetallic;
+        kD *= 1.0 - metallic;
 
-        float NdotL = max(dot(N, L), 0.0); // Scale light by NdotL.
+        float NdotL = max(dot(normal, L), 0.0); // Scale light by NdotL.
 
         // Note that we already multiplied the BRDF by the Fresnel (kS) so we won't multiply by kS again.
         //
-        Lo += (kD * uAlbedo / PI + specular) * radiance * NdotL;
+        Lo += (kD * albedo / PI + specular) * radiance * NdotL;
     }
 
-    vec3 ambient = vec3(0.03) * uAlbedo * uAO;
+    vec3 ambient = vec3(0.03) * albedo * ao;
     vec3 color = ambient + Lo;
 
     color = color / (color + vec3(1.0)); // HDR tonemapping.

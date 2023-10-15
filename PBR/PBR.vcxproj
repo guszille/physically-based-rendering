@@ -151,6 +151,7 @@
     <ClCompile Include="program.cpp" />
     <ClCompile Include="sources\graphics\ibo.cpp" />
     <ClCompile Include="sources\graphics\shader.cpp" />
+    <ClCompile Include="sources\graphics\texture.cpp" />
     <ClCompile Include="sources\graphics\vao.cpp" />
     <ClCompile Include="sources\graphics\vbo.cpp" />
     <ClCompile Include="sources\utils\camera.cpp" />
@@ -158,6 +159,7 @@
   <ItemGroup>
     <ClInclude Include="sources\graphics\ibo.h" />
     <ClInclude Include="sources\graphics\shader.h" />
+    <ClInclude Include="sources\graphics\texture.h" />
     <ClInclude Include="sources\graphics\vao.h" />
     <ClInclude Include="sources\graphics\vbo.h" />
     <ClInclude Include="sources\utils\camera.h" />
