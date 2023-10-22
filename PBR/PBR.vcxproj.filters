@@ -39,6 +39,12 @@
     <ClCompile Include="sources\graphics\texture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="sources\graphics\framebuffer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sources\graphics\cubemap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="sources\graphics\vao.h">
@@ -59,9 +65,23 @@
     <ClInclude Include="sources\graphics\texture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="sources\graphics\framebuffer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sources\graphics\cubemap.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="sources\shaders\vertex_shader.glsl" />
-    <None Include="sources\shaders\fragment_shader.glsl" />
+    <None Include="sources\shaders\2_pbr_texturized_vs.glsl" />
+    <None Include="sources\shaders\2_pbr_texturized_fs.glsl" />
+    <None Include="sources\shaders\1_pbr_vs.glsl" />
+    <None Include="sources\shaders\1_pbr_fs.glsl" />
+    <None Include="sources\shaders\3_equirectangular2cubemap_vs.glsl" />
+    <None Include="sources\shaders\3_equirectangular2cubemap_fs.glsl" />
+    <None Include="sources\shaders\3_environment_vs.glsl" />
+    <None Include="sources\shaders\3_environment_fs.glsl" />
+    <None Include="sources\shaders\3_irradiance_convolution_vs.glsl" />
+    <None Include="sources\shaders\3_irradiance_convolution_fs.glsl" />
   </ItemGroup>
 </Project>

@@ -11,8 +11,10 @@
 #include "sources/graphics/vao.h"
 #include "sources/graphics/vbo.h"
 #include "sources/graphics/ibo.h"
-#include "sources/graphics/texture.h"
 #include "sources/graphics/shader.h"
+#include "sources/graphics/texture.h"
+#include "sources/graphics/cubemap.h"
+#include "sources/graphics/framebuffer.h"
 
 #include "sources/utils/camera.h"
 
@@ -32,17 +34,39 @@ bool  CURSOR_ATTACHED     = false;
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 glm::mat4 projectionMatrix = glm::perspective(glm::radians(FIELD_OF_VIEW), WINDOW_ASPECT_RATIO, 0.1f, 100.0f);
 
-ShaderProgram* shader;
-
-Texture* albedoTex;
-Texture* normalTex;
-Texture* metallicTex;
-Texture* roughnessTex;
-Texture* aoTex;
+ShaderProgram* pbrShader;
+ShaderProgram* equirectangularToCubemapShader;
+ShaderProgram* environmentShader;
+ShaderProgram* irradianceShader;
 
 VAO* sphereVAO;
 VBO* sphereVBO;
 IBO* sphereIBO;
+
+unsigned int sphereIndexCount = 0;
+
+VAO* cubeVAO;
+VBO* cubeVBO;
+
+Texture* equirectangularHDRTex;
+
+FrameBuffer* captureFB;
+
+int CAPTURE_FB_WIDTH  = 512;
+int CAPTURE_FB_HEIGHT = 512;
+
+CubeMap* environmentCM;
+CubeMap* irradianceCM;
+
+glm::mat4 envProjectionMatrix = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
+glm::mat4 envViewMatrices[] = {
+	glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
+	glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
+	glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)),
+	glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)),
+	glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
+	glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f))
+};
 
 glm::vec3 lightPositions[] = {
 	glm::vec3(-10.0f,  10.0f,  10.0f),
@@ -57,8 +81,6 @@ glm::vec3 lightColors[] = {
 	glm::vec3(300.0f, 300.0f, 300.0f),
 	glm::vec3(300.0f, 300.0f, 300.0f)
 };
-
-unsigned int indexCount = 0;
 
 // GLFW window callbacks.
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
@@ -76,8 +98,8 @@ void setupApplication()
 	std::vector<glm::vec3> positions;
 	std::vector<glm::vec3> normals;
 	std::vector<glm::vec2> uvs;
-	std::vector<float> vertices;
-	std::vector<unsigned int> indices;
+	std::vector<float> sphereVertices;
+	std::vector<unsigned int> sphereIndices;
 
 	for (unsigned int x = 0; x <= X_SEGMENTS; ++x)
 	{
@@ -101,69 +123,115 @@ void setupApplication()
 		{
 			for (int x = 0; x <= X_SEGMENTS; ++x)
 			{
-				indices.push_back((y) * (X_SEGMENTS + 1) + x);
-				indices.push_back((y + 1) * (X_SEGMENTS + 1) + x);
+				sphereIndices.push_back((y) * (X_SEGMENTS + 1) + x);
+				sphereIndices.push_back((y + 1) * (X_SEGMENTS + 1) + x);
 			}
 		}
 		else // Odd rows.
 		{
 			for (int x = X_SEGMENTS; x >= 0; --x)
 			{
-				indices.push_back((y + 1) * (X_SEGMENTS + 1) + x);
-				indices.push_back((y) * (X_SEGMENTS + 1) + x);
+				sphereIndices.push_back((y + 1) * (X_SEGMENTS + 1) + x);
+				sphereIndices.push_back((y) * (X_SEGMENTS + 1) + x);
 			}
 		}
 	}
 
-	indexCount = static_cast<unsigned int>(indices.size());
+	sphereIndexCount = static_cast<unsigned int>(sphereIndices.size());
 
 	for (unsigned int i = 0; i < positions.size(); ++i)
 	{
-		vertices.push_back(positions[i].x);
-		vertices.push_back(positions[i].y);
-		vertices.push_back(positions[i].z);
+		sphereVertices.push_back(positions[i].x);
+		sphereVertices.push_back(positions[i].y);
+		sphereVertices.push_back(positions[i].z);
 
 		if (normals.size() > 0)
 		{
-			vertices.push_back(normals[i].x);
-			vertices.push_back(normals[i].y);
-			vertices.push_back(normals[i].z);
+			sphereVertices.push_back(normals[i].x);
+			sphereVertices.push_back(normals[i].y);
+			sphereVertices.push_back(normals[i].z);
 		}
 
 		if (uvs.size() > 0)
 		{
-			vertices.push_back(uvs[i].x);
-			vertices.push_back(uvs[i].y);
+			sphereVertices.push_back(uvs[i].x);
+			sphereVertices.push_back(uvs[i].y);
 		}
 	}
 
-	shader = new ShaderProgram("sources/shaders/vertex_shader.glsl", "sources/shaders/fragment_shader.glsl");
+	float cubeVertices[] = {
+		// back face
+		-1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
+		 1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 1.0f, // top-right
+		 1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 0.0f, // bottom-right
+		 1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 1.0f, // top-right
+		-1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
+		-1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 1.0f, // top-left
+		// front face
+		-1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, // bottom-left
+		 1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 0.0f, // bottom-right
+		 1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 1.0f, // top-right
+		 1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 1.0f, // top-right
+		-1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 1.0f, // top-left
+		-1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, // bottom-left
+		// left face
+		-1.0f,  1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-right
+		-1.0f,  1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 1.0f, // top-left
+		-1.0f, -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-left
+		-1.0f, -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-left
+		-1.0f, -1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 0.0f, // bottom-right
+		-1.0f,  1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-right
+		// right face
+		 1.0f,  1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-left
+		 1.0f, -1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-right
+		 1.0f,  1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 1.0f, // top-right
+		 1.0f, -1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-right
+		 1.0f,  1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-left
+		 1.0f, -1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 0.0f, // bottom-left
+		 // bottom face
+		-1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 1.0f, // top-right
+		 1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 1.0f, // top-left
+		 1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 0.0f, // bottom-left
+		 1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 0.0f, // bottom-left
+		-1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 0.0f, // bottom-right
+		-1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 1.0f, // top-right
+		 // top face
+		-1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f, // top-left
+		 1.0f,  1.0f , 1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 0.0f, // bottom-right
+		 1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 1.0f, // top-right
+		 1.0f,  1.0f,  1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 0.0f, // bottom-right
+		-1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f, // top-left
+		-1.0f,  1.0f,  1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 0.0f  // bottom-left
+	};
 
-	shader->bind();
+	pbrShader = new ShaderProgram("sources/shaders/1_pbr_vs.glsl", "sources/shaders/1_pbr_fs.glsl");
+	equirectangularToCubemapShader = new ShaderProgram("sources/shaders/3_equirectangular2cubemap_vs.glsl", "sources/shaders/3_equirectangular2cubemap_fs.glsl");
+	environmentShader = new ShaderProgram("sources/shaders/3_environment_vs.glsl", "sources/shaders/3_environment_fs.glsl");
+	irradianceShader = new ShaderProgram("sources/shaders/3_irradiance_convolution_vs.glsl", "sources/shaders/3_irradiance_convolution_fs.glsl");
 
-	shader->setUniform1i("uAlbedoMap", 0);
-	shader->setUniform1i("uNormalMap", 1);
-	shader->setUniform1i("uMetallicMap", 2);
-	shader->setUniform1i("uRoughnessMap", 3);
-	shader->setUniform1i("uAOMap", 4);
+	pbrShader->bind();
+	pbrShader->setUniform3f("uAlbedo", 0.5f, 0.0f, 0.0f);
+	pbrShader->setUniform1f("uAO", 1.0f);
+	pbrShader->setUniform1i("uIrradianceMap", 0);
+	pbrShader->unbind();
 
-	shader->unbind();
+	equirectangularToCubemapShader->bind();
+	equirectangularToCubemapShader->setUniform1i("uEquirectangularMap", 0);
+	equirectangularToCubemapShader->setUniformMatrix4fv("uProjection", envProjectionMatrix);
+	equirectangularToCubemapShader->unbind();
 
-	albedoTex = new Texture("resources/textures/rusted_iron/albedo.png");
-	normalTex = new Texture("resources/textures/rusted_iron/normal.png");
-	metallicTex = new Texture("resources/textures/rusted_iron/metallic.png");
-	roughnessTex = new Texture("resources/textures/rusted_iron/roughness.png");
-	aoTex = new Texture("resources/textures/rusted_iron/ao.png");
+	environmentShader->bind();
+	environmentShader->setUniform1i("uEnvironmentMap", 0);
+	environmentShader->unbind();
 
-	albedoTex->bind(0);
-	normalTex->bind(1);
-	metallicTex->bind(2);
-	roughnessTex->bind(3);
-	aoTex->bind(4);
+	irradianceShader->bind();
+	irradianceShader->setUniform1i("uEnvironmentMap", 0);
+	irradianceShader->setUniformMatrix4fv("uProjection", envProjectionMatrix);
+	irradianceShader->unbind();
 
 	sphereVAO = new VAO();
-	sphereVBO = new VBO(&vertices[0], vertices.size() * sizeof(float));
-	sphereIBO = new IBO(&indices[0], indices.size() * sizeof(unsigned int));
+	sphereVBO = new VBO(&sphereVertices[0], sphereVertices.size() * sizeof(float));
+	sphereIBO = new IBO(&sphereIndices[0], sphereIndices.size() * sizeof(unsigned int));
 
 	sphereVAO->bind();
 	sphereVBO->bind();
@@ -176,15 +244,91 @@ void setupApplication()
 	sphereVAO->unbind();
 	sphereVBO->unbind();
 	sphereIBO->unbind();
+
+	cubeVAO = new VAO();
+	cubeVBO = new VBO(cubeVertices, sizeof(cubeVertices));
+
+	cubeVAO->bind();
+	cubeVBO->bind();
+
+	cubeVAO->setVertexAttribute(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(0));
+	cubeVAO->setVertexAttribute(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+	cubeVAO->setVertexAttribute(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+
+	cubeVAO->unbind();
+	cubeVBO->unbind();
+
+	equirectangularHDRTex = new Texture("resources/textures/environment/equirectangular_map.hdr", true);
+
+	captureFB = new FrameBuffer(CAPTURE_FB_WIDTH, CAPTURE_FB_HEIGHT);
+
+	environmentCM = new CubeMap(512, 512, GL_RGB16F, GL_RGB, GL_FLOAT);
+
+	equirectangularToCubemapShader->bind();
+	captureFB->bind();
+	cubeVAO->bind();
+	equirectangularHDRTex->bind(0);
+
+	glViewport(0, 0, 512, 512);
+
+	for (unsigned int i = 0; i < 6; ++i)
+	{
+		equirectangularToCubemapShader->setUniformMatrix4fv("uView", envViewMatrices[i]);
+		captureFB->bindColorBufferToFrameBuffer(environmentCM->getID(), 0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i);
+
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		glDrawArrays(GL_TRIANGLES, 0, 36);
+	}
+
+	equirectangularHDRTex->unbind();
+	cubeVAO->unbind();
+	captureFB->unbind();
+	equirectangularToCubemapShader->unbind();
+
+	irradianceCM = new CubeMap(32, 32, GL_RGB16F, GL_RGB, GL_FLOAT);
+
+	irradianceShader->bind();
+	captureFB->bind();
+	cubeVAO->bind();
+	environmentCM->bind(0);
+
+	glViewport(0, 0, 32, 32);
+
+	for (unsigned int i = 0; i < 6; ++i)
+	{
+		irradianceShader->setUniformMatrix4fv("uView", envViewMatrices[i]);
+		captureFB->bindColorBufferToFrameBuffer(irradianceCM->getID(), 0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i);
+
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		glDrawArrays(GL_TRIANGLES, 0, 36);
+	}
+
+	environmentCM->unbind();
+	cubeVAO->unbind();
+	captureFB->unbind();
+	irradianceShader->unbind();
+
+	glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 }
 
 void renderSphere()
 {
 	sphereVAO->bind();
 
-	glDrawElements(GL_TRIANGLE_STRIP, indexCount, GL_UNSIGNED_INT, 0);
+	glDrawElements(GL_TRIANGLE_STRIP, sphereIndexCount, GL_UNSIGNED_INT, 0);
 
 	sphereVAO->unbind();
+}
+
+void renderCube()
+{
+	cubeVAO->bind();
+
+	glDrawArrays(GL_TRIANGLES, 0, 36);
+
+	cubeVAO->unbind();
 }
 
 void render()
@@ -196,50 +340,53 @@ void render()
 	glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	shader->bind();
+	pbrShader->bind();
 
-	shader->setUniformMatrix4fv("uProjection", projectionMatrix);
-	shader->setUniformMatrix4fv("uView", camera.getViewMatrix());
-	shader->setUniform3f("uCameraPos", camera.getPosition());
+	pbrShader->setUniformMatrix4fv("uProjection", projectionMatrix);
+	pbrShader->setUniformMatrix4fv("uView", camera.getViewMatrix());
+	pbrShader->setUniform3f("uCameraPos", camera.getPosition());
 
 	for (int n = 0; n < 4; ++n)
 	{
-		shader->setUniform3f(("uLightPositions[" + std::to_string(n) + "]").c_str(), lightPositions[n]);
-		shader->setUniform3f(("uLightColors[" + std::to_string(n) + "]").c_str(), lightColors[n]);
+		pbrShader->setUniform3f(("uLightPositions[" + std::to_string(n) + "]").c_str(), lightPositions[n]);
+		pbrShader->setUniform3f(("uLightColors[" + std::to_string(n) + "]").c_str(), lightColors[n]);
 	}
+
+	irradianceCM->bind(0);
 
 	// Rendering materials.
 	for (int row = 0; row < nRows; ++row)
 	{
+		pbrShader->setUniform1f("uMetallic", (float)row / (float)nRows);
+
 		for (int column = 0; column < nColumns; ++column)
 		{
 			glm::mat4 modelMatrix = glm::mat4(1.0f);
 			modelMatrix = glm::translate(modelMatrix, glm::vec3((column - (nColumns / 2)) * spacing, (row - (nRows / 2)) * spacing, 0.0f));
 			
-			shader->setUniformMatrix4fv("uModel", modelMatrix);
-			shader->setUniformMatrix3fv("uNormalMatrix", glm::transpose(glm::inverse(glm::mat3(modelMatrix))));
+			pbrShader->setUniformMatrix4fv("uModel", modelMatrix);
+			pbrShader->setUniformMatrix3fv("uNormalMatrix", glm::transpose(glm::inverse(glm::mat3(modelMatrix))));
+
+			// We clamp the roughness to 0.05 - 1.0 as perfectly smooth surfaces (roughness of 0.0) tend to look a bit off on direct lighting.
+			//
+			pbrShader->setUniform1f("uRoughness", glm::clamp((float)column / (float)nColumns, 0.05f, 1.0f));
 			
 			renderSphere();
 		}
 	}
 
-	// Rendering light sources.
-	/*
-	for (int n = 0; n < 4; ++n)
-	{
-		glm::mat4 modelMatrix = glm::mat4(1.0f);
+	pbrShader->unbind();
 
-		modelMatrix = glm::translate(modelMatrix, lightPositions[n]);
-		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.5f));
+	environmentShader->bind();
 
-		shader->setUniformMatrix4fv("uModel", modelMatrix);
-		shader->setUniformMatrix3fv("uNormalMatrix", glm::transpose(glm::inverse(glm::mat3(modelMatrix))));
+	environmentShader->setUniformMatrix4fv("uProjection", projectionMatrix);
+	environmentShader->setUniformMatrix4fv("uView", camera.getViewMatrix());
 
-		renderSphere();
-	}
-	*/
+	environmentCM->bind(0);
 
-	shader->unbind();
+	renderCube();
+
+	environmentShader->unbind();
 }
 
 int main()
@@ -284,6 +431,7 @@ int main()
 	}
 
 	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LEQUAL); // Set depth function to "less than AND equal" for SKYBOX depth trick.
 
 	setupApplication();
 

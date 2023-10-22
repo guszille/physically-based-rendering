@@ -149,6 +149,8 @@
   <ItemGroup>
     <ClCompile Include="external\sources\glad\glad.c" />
     <ClCompile Include="program.cpp" />
+    <ClCompile Include="sources\graphics\cubemap.cpp" />
+    <ClCompile Include="sources\graphics\framebuffer.cpp" />
     <ClCompile Include="sources\graphics\ibo.cpp" />
     <ClCompile Include="sources\graphics\shader.cpp" />
     <ClCompile Include="sources\graphics\texture.cpp" />
@@ -157,6 +159,8 @@
     <ClCompile Include="sources\utils\camera.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="sources\graphics\cubemap.h" />
+    <ClInclude Include="sources\graphics\framebuffer.h" />
     <ClInclude Include="sources\graphics\ibo.h" />
     <ClInclude Include="sources\graphics\shader.h" />
     <ClInclude Include="sources\graphics\texture.h" />
@@ -165,8 +169,16 @@
     <ClInclude Include="sources\utils\camera.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="sources\shaders\fragment_shader.glsl" />
-    <None Include="sources\shaders\vertex_shader.glsl" />
+    <None Include="sources\shaders\1_pbr_fs.glsl" />
+    <None Include="sources\shaders\2_pbr_texturized_fs.glsl" />
+    <None Include="sources\shaders\2_pbr_texturized_vs.glsl" />
+    <None Include="sources\shaders\1_pbr_vs.glsl" />
+    <None Include="sources\shaders\3_environment_fs.glsl" />
+    <None Include="sources\shaders\3_environment_vs.glsl" />
+    <None Include="sources\shaders\3_equirectangular2cubemap_fs.glsl" />
+    <None Include="sources\shaders\3_equirectangular2cubemap_vs.glsl" />
+    <None Include="sources\shaders\3_irradiance_convolution_fs.glsl" />
+    <None Include="sources\shaders\3_irradiance_convolution_vs.glsl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

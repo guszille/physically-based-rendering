@@ -10,15 +10,16 @@
 #include <stbi/stb_image.h>
 #endif // _STB_IMAGE_INCLUDED
 
-class Texture
+class CubeMap
 {
 public:
-	Texture(const char* filepath, bool hdr = false, bool gammaCorrection = false);
+	CubeMap(int width, int height, int internalFormat, int format, int type, bool generateMipMaps = false);
+
+	unsigned int getID();
 
 	void bind(int unit);
 	void unbind();
 
 private:
 	unsigned int ID;
-	int width, height, colorChannels;
 };
