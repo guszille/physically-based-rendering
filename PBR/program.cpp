@@ -54,6 +54,11 @@ VBO* cubeVBO;
 VAO* quadVAO;
 VBO* quadVBO;
 
+Texture* albedoTex;
+Texture* normalTex;
+Texture* metallicTex;
+Texture* roughnessTex;
+Texture* aoTex;
 Texture* equirectangularHDRTex;
 Texture* brdfLUTTex;
 
@@ -220,7 +225,7 @@ void setupApplication()
 		 1.0f, -1.0f, 0.0f, 1.0f, 0.0f
 	};
 
-	pbrShader = new ShaderProgram("sources/shaders/1_pbr_vs.glsl", "sources/shaders/1_pbr_fs.glsl");
+	pbrShader = new ShaderProgram("sources/shaders/2_pbr_texturized_vs.glsl", "sources/shaders/2_pbr_texturized_fs.glsl");
 	equirectangularToCubemapShader = new ShaderProgram("sources/shaders/3_equirectangular2cubemap_vs.glsl", "sources/shaders/3_equirectangular2cubemap_fs.glsl");
 	environmentShader = new ShaderProgram("sources/shaders/3_environment_vs.glsl", "sources/shaders/3_environment_fs.glsl");
 	irradianceShader = new ShaderProgram("sources/shaders/3_irradiance_convolution_vs.glsl", "sources/shaders/3_irradiance_convolution_fs.glsl");
@@ -228,11 +233,14 @@ void setupApplication()
 	brdfShader = new ShaderProgram("sources/shaders/4_brdf_vs.glsl", "sources/shaders/4_brdf_fs.glsl");
 
 	pbrShader->bind();
-	pbrShader->setUniform3f("uAlbedo", 0.5f, 0.0f, 0.0f);
-	pbrShader->setUniform1f("uAO", 1.0f);
-	pbrShader->setUniform1i("uIrradianceMap", 0);
-	pbrShader->setUniform1i("uPrefilterMap", 1);
-	pbrShader->setUniform1i("uBRDFLUTMap", 2);
+	pbrShader->setUniform1i("uAlbedoMap", 0);
+	pbrShader->setUniform1i("uNormalMap", 1);
+	pbrShader->setUniform1i("uMetallicMap", 2);
+	pbrShader->setUniform1i("uRoughnessMap", 3);
+	pbrShader->setUniform1i("uAOMap", 4);
+	pbrShader->setUniform1i("uIrradianceMap", 5);
+	pbrShader->setUniform1i("uPrefilterMap", 6);
+	pbrShader->setUniform1i("uBRDFLUTMap", 7);
 	pbrShader->unbind();
 
 	equirectangularToCubemapShader->bind();
@@ -253,6 +261,12 @@ void setupApplication()
 	prefilterShader->setUniform1i("uEnvironmentMap", 0);
 	prefilterShader->setUniformMatrix4fv("uProjection", envProjectionMatrix);
 	prefilterShader->unbind();
+
+	albedoTex = new Texture("resources/textures/rusted_iron/albedo.png");
+	normalTex = new Texture("resources/textures/rusted_iron/normal.png");
+	metallicTex = new Texture("resources/textures/rusted_iron/metallic.png");
+	roughnessTex = new Texture("resources/textures/rusted_iron/roughness.png");
+	aoTex = new Texture("resources/textures/rusted_iron/ao.png");
 
 	sphereVAO = new VAO();
 	sphereVBO = new VBO(&sphereVertices[0], sphereVertices.size() * sizeof(float));
@@ -438,10 +452,6 @@ void renderCube()
 
 void render()
 {
-	int nRows = 7;
-	int nColumns = 7;
-	float spacing = 2.5f;
-
 	glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -457,30 +467,22 @@ void render()
 		pbrShader->setUniform3f(("uLightColors[" + std::to_string(n) + "]").c_str(), lightColors[n]);
 	}
 
-	irradianceCM->bind(0);
-	prefilterCM->bind(1);
-	brdfLUTTex->bind(2);
+	albedoTex->bind(0);
+	normalTex->bind(1);
+	metallicTex->bind(2);
+	roughnessTex->bind(3);
+	aoTex->bind(4);
+	irradianceCM->bind(5);
+	prefilterCM->bind(6);
+	brdfLUTTex->bind(7);
 
-	// Rendering materials.
-	for (int row = 0; row < nRows; ++row)
-	{
-		pbrShader->setUniform1f("uMetallic", (float)row / (float)nRows);
+	// Rendering material.
+	glm::mat4 modelMatrix = glm::mat4(1.0f);
 
-		for (int column = 0; column < nColumns; ++column)
-		{
-			glm::mat4 modelMatrix = glm::mat4(1.0f);
-			modelMatrix = glm::translate(modelMatrix, glm::vec3((column - (nColumns / 2)) * spacing, (row - (nRows / 2)) * spacing, 0.0f));
-			
-			pbrShader->setUniformMatrix4fv("uModel", modelMatrix);
-			pbrShader->setUniformMatrix3fv("uNormalMatrix", glm::transpose(glm::inverse(glm::mat3(modelMatrix))));
+	pbrShader->setUniformMatrix4fv("uModel", modelMatrix);
+	pbrShader->setUniformMatrix3fv("uNormalMatrix", glm::transpose(glm::inverse(glm::mat3(modelMatrix))));
 
-			// We clamp the roughness to 0.05 - 1.0 as perfectly smooth surfaces (roughness of 0.0) tend to look a bit off on direct lighting.
-			//
-			pbrShader->setUniform1f("uRoughness", glm::clamp((float)column / (float)nColumns, 0.05f, 1.0f));
-			
-			renderSphere();
-		}
-	}
+	renderSphere();
 
 	pbrShader->unbind();
 
