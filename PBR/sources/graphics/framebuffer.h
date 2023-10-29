@@ -12,7 +12,8 @@ public:
 	void bind();
 	void unbind();
 
-	void bindColorBufferToFrameBuffer(unsigned int colorBufferID, int attachmentNumber, int target);
+	void bindColorBufferToFrameBuffer(unsigned int colorBufferID, int attachmentNumber, int target, int mipLevel = 0);
+	void resizeDepthBuffer(int width, int height);
 
 private:
 	unsigned int ID, depthBufferID;

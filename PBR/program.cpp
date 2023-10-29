@@ -17,6 +17,7 @@
 #include "sources/graphics/framebuffer.h"
 
 #include "sources/utils/camera.h"
+#include "sources/utils/debug.h"
 
 // Global variables.
 int   WINDOW_WIDTH        = 1280;
@@ -38,6 +39,8 @@ ShaderProgram* pbrShader;
 ShaderProgram* equirectangularToCubemapShader;
 ShaderProgram* environmentShader;
 ShaderProgram* irradianceShader;
+ShaderProgram* prefilterShader;
+ShaderProgram* brdfShader;
 
 VAO* sphereVAO;
 VBO* sphereVBO;
@@ -48,7 +51,11 @@ unsigned int sphereIndexCount = 0;
 VAO* cubeVAO;
 VBO* cubeVBO;
 
+VAO* quadVAO;
+VBO* quadVBO;
+
 Texture* equirectangularHDRTex;
+Texture* brdfLUTTex;
 
 FrameBuffer* captureFB;
 
@@ -57,6 +64,7 @@ int CAPTURE_FB_HEIGHT = 512;
 
 CubeMap* environmentCM;
 CubeMap* irradianceCM;
+CubeMap* prefilterCM;
 
 glm::mat4 envProjectionMatrix = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
 glm::mat4 envViewMatrices[] = {
@@ -204,15 +212,27 @@ void setupApplication()
 		-1.0f,  1.0f,  1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 0.0f  // bottom-left
 	};
 
+	float quadVertices[] = {
+		// positions        // texture coords
+		-1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+		-1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+		 1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
+		 1.0f, -1.0f, 0.0f, 1.0f, 0.0f
+	};
+
 	pbrShader = new ShaderProgram("sources/shaders/1_pbr_vs.glsl", "sources/shaders/1_pbr_fs.glsl");
 	equirectangularToCubemapShader = new ShaderProgram("sources/shaders/3_equirectangular2cubemap_vs.glsl", "sources/shaders/3_equirectangular2cubemap_fs.glsl");
 	environmentShader = new ShaderProgram("sources/shaders/3_environment_vs.glsl", "sources/shaders/3_environment_fs.glsl");
 	irradianceShader = new ShaderProgram("sources/shaders/3_irradiance_convolution_vs.glsl", "sources/shaders/3_irradiance_convolution_fs.glsl");
+	prefilterShader = new ShaderProgram("sources/shaders/4_prefilter_convolution_vs.glsl", "sources/shaders/4_prefilter_convolution_fs.glsl");
+	brdfShader = new ShaderProgram("sources/shaders/4_brdf_vs.glsl", "sources/shaders/4_brdf_fs.glsl");
 
 	pbrShader->bind();
 	pbrShader->setUniform3f("uAlbedo", 0.5f, 0.0f, 0.0f);
 	pbrShader->setUniform1f("uAO", 1.0f);
 	pbrShader->setUniform1i("uIrradianceMap", 0);
+	pbrShader->setUniform1i("uPrefilterMap", 1);
+	pbrShader->setUniform1i("uBRDFLUTMap", 2);
 	pbrShader->unbind();
 
 	equirectangularToCubemapShader->bind();
@@ -228,6 +248,11 @@ void setupApplication()
 	irradianceShader->setUniform1i("uEnvironmentMap", 0);
 	irradianceShader->setUniformMatrix4fv("uProjection", envProjectionMatrix);
 	irradianceShader->unbind();
+
+	prefilterShader->bind();
+	prefilterShader->setUniform1i("uEnvironmentMap", 0);
+	prefilterShader->setUniformMatrix4fv("uProjection", envProjectionMatrix);
+	prefilterShader->unbind();
 
 	sphereVAO = new VAO();
 	sphereVBO = new VBO(&sphereVertices[0], sphereVertices.size() * sizeof(float));
@@ -258,57 +283,137 @@ void setupApplication()
 	cubeVAO->unbind();
 	cubeVBO->unbind();
 
+	quadVAO = new VAO();
+	quadVBO = new VBO(quadVertices, sizeof(quadVertices));
+
+	quadVAO->bind();
+	quadVBO->bind();
+
+	quadVAO->setVertexAttribute(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(0));
+	quadVAO->setVertexAttribute(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+
+	quadVAO->unbind();
+	quadVBO->unbind();
+
 	equirectangularHDRTex = new Texture("resources/textures/environment/equirectangular_map.hdr", true);
+	brdfLUTTex = new Texture(512, 512, GL_RG16F, GL_RG, GL_FLOAT);
 
 	captureFB = new FrameBuffer(CAPTURE_FB_WIDTH, CAPTURE_FB_HEIGHT);
 
 	environmentCM = new CubeMap(512, 512, GL_RGB16F, GL_RGB, GL_FLOAT);
-
-	equirectangularToCubemapShader->bind();
-	captureFB->bind();
-	cubeVAO->bind();
-	equirectangularHDRTex->bind(0);
-
-	glViewport(0, 0, 512, 512);
-
-	for (unsigned int i = 0; i < 6; ++i)
-	{
-		equirectangularToCubemapShader->setUniformMatrix4fv("uView", envViewMatrices[i]);
-		captureFB->bindColorBufferToFrameBuffer(environmentCM->getID(), 0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i);
-
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		glDrawArrays(GL_TRIANGLES, 0, 36);
-	}
-
-	equirectangularHDRTex->unbind();
-	cubeVAO->unbind();
-	captureFB->unbind();
-	equirectangularToCubemapShader->unbind();
-
 	irradianceCM = new CubeMap(32, 32, GL_RGB16F, GL_RGB, GL_FLOAT);
+	prefilterCM = new CubeMap(128, 128, GL_RGB16F, GL_RGB, GL_FLOAT, true);
 
-	irradianceShader->bind();
-	captureFB->bind();
-	cubeVAO->bind();
-	environmentCM->bind(0);
-
-	glViewport(0, 0, 32, 32);
-
-	for (unsigned int i = 0; i < 6; ++i)
+	// Convert the HDR equirectangular environment map to a cubemap.
 	{
-		irradianceShader->setUniformMatrix4fv("uView", envViewMatrices[i]);
-		captureFB->bindColorBufferToFrameBuffer(irradianceCM->getID(), 0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i);
+		equirectangularToCubemapShader->bind();
+		captureFB->bind();
+		cubeVAO->bind();
+		equirectangularHDRTex->bind(0);
+
+		glViewport(0, 0, 512, 512);
+
+		for (unsigned int i = 0; i < 6; ++i)
+		{
+			equirectangularToCubemapShader->setUniformMatrix4fv("uView", envViewMatrices[i]);
+			captureFB->bindColorBufferToFrameBuffer(environmentCM->getID(), 0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i);
+
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+			glDrawArrays(GL_TRIANGLES, 0, 36);
+		}
+
+		equirectangularHDRTex->unbind();
+		cubeVAO->unbind();
+		captureFB->unbind();
+		equirectangularToCubemapShader->unbind();
+	}
+
+	// Solve diffuse integral by convolution to create an irradiance (cube)map.
+	{
+		irradianceShader->bind();
+		captureFB->bind();
+		cubeVAO->bind();
+		environmentCM->bind(0);
+
+		// No need to resize the framebuffer's depth buffer.
+
+		glViewport(0, 0, 32, 32);
+
+		for (unsigned int i = 0; i < 6; ++i)
+		{
+			irradianceShader->setUniformMatrix4fv("uView", envViewMatrices[i]);
+			captureFB->bindColorBufferToFrameBuffer(irradianceCM->getID(), 0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i);
+
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+			glDrawArrays(GL_TRIANGLES, 0, 36);
+		}
+
+		environmentCM->unbind();
+		cubeVAO->unbind();
+		captureFB->unbind();
+		irradianceShader->unbind();
+	}
+
+	// Run a quasi monte-carlo simulation on the environment lighting to create a prefilter (cube)map.
+	{
+		prefilterShader->bind();
+		captureFB->bind();
+		cubeVAO->bind();
+		environmentCM->bind(0);
+
+		unsigned int maxMipLevels = 5;
+
+		for (unsigned int mip = 0; mip < maxMipLevels; ++mip)
+		{
+			float roughness = (float)mip / (float)(maxMipLevels - 1);
+			unsigned int mipWidth = static_cast<unsigned int>(128 * std::pow(0.5, mip));
+			unsigned int mipHeight = static_cast<unsigned int>(128 * std::pow(0.5, mip));
+
+			prefilterShader->setUniform1f("uRoughness", roughness);
+			captureFB->resizeDepthBuffer(mipWidth, mipHeight);
+
+			glViewport(0, 0, mipWidth, mipHeight);
+
+			for (unsigned int i = 0; i < 6; ++i)
+			{
+				prefilterShader->setUniformMatrix4fv("uView", envViewMatrices[i]);
+				captureFB->bindColorBufferToFrameBuffer(prefilterCM->getID(), 0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, mip);
+				
+				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+				glDrawArrays(GL_TRIANGLES, 0, 36);
+			}
+		}
+
+		environmentCM->unbind();
+		cubeVAO->unbind();
+		captureFB->unbind();
+		prefilterShader->unbind();
+	}
+
+	// Generate a 2D LUT from the BRDF equations used.
+	{
+		brdfShader->bind();
+		captureFB->bind();
+		quadVAO->bind();
+		brdfLUTTex->bind(0);
+
+		captureFB->resizeDepthBuffer(512, 512);
+		captureFB->bindColorBufferToFrameBuffer(brdfLUTTex->getID(), 0, GL_TEXTURE_2D);
+
+		glViewport(0, 0, 512, 512);
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		glDrawArrays(GL_TRIANGLES, 0, 36);
-	}
+		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-	environmentCM->unbind();
-	cubeVAO->unbind();
-	captureFB->unbind();
-	irradianceShader->unbind();
+		brdfLUTTex->unbind();
+		quadVAO->unbind();
+		captureFB->unbind();
+		brdfShader->unbind();
+	}
 
 	glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 }
@@ -353,6 +458,8 @@ void render()
 	}
 
 	irradianceCM->bind(0);
+	prefilterCM->bind(1);
+	brdfLUTTex->bind(2);
 
 	// Rendering materials.
 	for (int row = 0; row < nRows; ++row)
@@ -377,6 +484,7 @@ void render()
 
 	pbrShader->unbind();
 
+	// Rendering background.
 	environmentShader->bind();
 
 	environmentShader->setUniformMatrix4fv("uProjection", projectionMatrix);
@@ -402,6 +510,7 @@ int main()
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindowHint(GLFW_SAMPLES, 4);
+	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
 
 	GLFWwindow* window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "PBR", NULL, NULL);
 
@@ -432,6 +541,22 @@ int main()
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL); // Set depth function to "less than AND equal" for SKYBOX depth trick.
+	
+	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS); // Enable seamless cubemap sampling for lower mip levels in the pre-filter map.
+
+	int contextFlags;
+	glGetIntegerv(GL_CONTEXT_FLAGS, &contextFlags);
+
+	if (contextFlags & GL_CONTEXT_FLAG_DEBUG_BIT)
+	{
+		std::cout << "OpenGL DEBUG context initialized!" << std::endl;
+
+		glEnable(GL_DEBUG_OUTPUT);
+		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+
+		glDebugMessageCallback(checkGLDebugMessage, nullptr);
+		glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+	}
 
 	setupApplication();
 

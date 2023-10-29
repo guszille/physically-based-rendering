@@ -157,6 +157,7 @@
     <ClCompile Include="sources\graphics\vao.cpp" />
     <ClCompile Include="sources\graphics\vbo.cpp" />
     <ClCompile Include="sources\utils\camera.cpp" />
+    <ClCompile Include="sources\utils\debug.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="sources\graphics\cubemap.h" />
@@ -167,6 +168,7 @@
     <ClInclude Include="sources\graphics\vao.h" />
     <ClInclude Include="sources\graphics\vbo.h" />
     <ClInclude Include="sources\utils\camera.h" />
+    <ClInclude Include="sources\utils\debug.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="sources\shaders\1_pbr_fs.glsl" />
@@ -179,6 +181,10 @@
     <None Include="sources\shaders\3_equirectangular2cubemap_vs.glsl" />
     <None Include="sources\shaders\3_irradiance_convolution_fs.glsl" />
     <None Include="sources\shaders\3_irradiance_convolution_vs.glsl" />
+    <None Include="sources\shaders\4_brdf_fs.glsl" />
+    <None Include="sources\shaders\4_brdf_vs.glsl" />
+    <None Include="sources\shaders\4_prefilter_convolution_fs.glsl" />
+    <None Include="sources\shaders\4_prefilter_convolution_vs.glsl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

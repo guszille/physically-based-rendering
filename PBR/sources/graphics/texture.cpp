@@ -92,6 +92,27 @@ Texture::Texture(const char* filepath, bool hdr, bool gammaCorrection)
 	}
 }
 
+Texture::Texture(int width, int height, int internalFormat, int format, int type)
+	: ID(), width(width), height(height), colorChannels()
+{
+	glGenTextures(1, &ID);
+	glBindTexture(GL_TEXTURE_2D, ID);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, nullptr);
+	
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+unsigned int Texture::getID()
+{
+	return ID;
+}
+
 void Texture::bind(int unit)
 {
 	if (unit >= 0 && unit <= 15)

@@ -14,6 +14,8 @@ uniform float uAO;
 
 // IBL.
 uniform samplerCube uIrradianceMap;
+uniform samplerCube uPrefilterMap;
+uniform sampler2D uBRDFLUTMap;
 
 // Lights parameters.
 uniform vec3 uLightPositions[4];
@@ -65,10 +67,16 @@ vec3 fresnelSchlick(vec3 F0, float cosTheta)
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
+vec3 fresnelSchlickRoughness(float cosTheta, float roughness, vec3 F0)
+{
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
 void main()
 {
     vec3 N = normalize(ioNormal);
     vec3 V = normalize(uCameraPos - ioWorldPos);
+    vec3 R = reflect(-V, N);
 
     // Calculate reflectance at normal incidence:
     //
@@ -122,14 +130,22 @@ void main()
     // vec3 ambient = vec3(0.03) * uAlbedo * uAO;
 
     // Ambient light, IBL approach.
-    vec3 kS = fresnelSchlick(F0, max(dot(N, V), 0.0));
+    vec3 F = fresnelSchlickRoughness(max(dot(N, V), 0.0), uRoughness, F0);
+    vec3 kS = F;
     vec3 kD = 1.0 - kS;
 
     kD *= 1.0 - uMetallic;
     
+    const float MAX_REFLECTION_LOD = 4.0;
+
     vec3 irradiance = texture(uIrradianceMap, N).rgb;
+
+    vec3 prefilteredColor = textureLod(uPrefilterMap, R, uRoughness * MAX_REFLECTION_LOD).rgb;    
+    vec2 BRDF = texture(uBRDFLUTMap, vec2(max(dot(N, V), 0.0), uRoughness)).rg;
+
     vec3 diffuse = irradiance * uAlbedo;
-    vec3 ambient = (kD * diffuse) * uAO;
+    vec3 specular = prefilteredColor * (F * BRDF.x + BRDF.y);
+    vec3 ambient = (kD * diffuse + specular) * uAO;
 
     // Final pixel color.
     vec3 color = ambient + Lo;

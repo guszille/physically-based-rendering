@@ -45,6 +45,9 @@
     <ClCompile Include="sources\graphics\cubemap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="sources\utils\debug.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="sources\graphics\vao.h">
@@ -71,6 +74,9 @@
     <ClInclude Include="sources\graphics\cubemap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="sources\utils\debug.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="sources\shaders\2_pbr_texturized_vs.glsl" />
@@ -83,5 +89,9 @@
     <None Include="sources\shaders\3_environment_fs.glsl" />
     <None Include="sources\shaders\3_irradiance_convolution_vs.glsl" />
     <None Include="sources\shaders\3_irradiance_convolution_fs.glsl" />
+    <None Include="sources\shaders\4_prefilter_convolution_vs.glsl" />
+    <None Include="sources\shaders\4_prefilter_convolution_fs.glsl" />
+    <None Include="sources\shaders\4_brdf_vs.glsl" />
+    <None Include="sources\shaders\4_brdf_fs.glsl" />
   </ItemGroup>
 </Project>

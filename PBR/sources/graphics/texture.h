@@ -14,6 +14,9 @@ class Texture
 {
 public:
 	Texture(const char* filepath, bool hdr = false, bool gammaCorrection = false);
+	Texture(int width, int height, int internalFormat, int format, int type);
+
+	unsigned int getID();
 
 	void bind(int unit);
 	void unbind();

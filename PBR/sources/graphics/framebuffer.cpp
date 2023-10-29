@@ -21,9 +21,16 @@ void FrameBuffer::unbind()
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void FrameBuffer::bindColorBufferToFrameBuffer(unsigned int colorBufferID, int attachmentNumber, int target)
+void FrameBuffer::bindColorBufferToFrameBuffer(unsigned int colorBufferID, int attachmentNumber, int target, int mipLevel)
 {
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + attachmentNumber, target, colorBufferID, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + attachmentNumber, target, colorBufferID, mipLevel);
+}
+
+void FrameBuffer::resizeDepthBuffer(int width, int height)
+{
+	glBindRenderbuffer(GL_RENDERBUFFER, depthBufferID);
+
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
 }
 
 void FrameBuffer::attachRenderBufferAsDepthBuffer(int width, int height)
